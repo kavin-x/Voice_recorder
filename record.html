@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hey Heka!!!</title>
+    <style>
+        .button-24 {
+            background: #FF4742;
+            border: 1px solid #FF4742;
+            border-radius: 6px;
+            box-shadow: rgba(0, 0, 0, 0.1) 1px 2px 4px;
+            box-sizing: border-box;
+            color: #FFFFFF;
+            cursor: pointer;
+            display: inline-block;
+            font-family: nunito, roboto, proxima-nova, "proxima nova", sans-serif;
+            font-size: 16px;
+            font-weight: 800;
+            line-height: 16px;
+            min-height: 40px;
+            outline: 0;
+            padding: 12px 14px;
+            text-align: center;
+            text-rendering: geometricprecision;
+            text-transform: none;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            vertical-align: middle;
+            width: fit-content;
+        }
+
+        .button-24:hover,
+        .button-24:active {
+            background-color: initial;
+            background-position: 0 0;
+            color: #FF4742;
+        }
+
+        .button-24:active {
+            opacity: .5;
+        }
+
+        .centered-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            /* Use the full viewport height */
+        }
+
+        .audio-counter {
+            font-size: larger;
+            margin-top: 1%;
+        }
+
+        .recording-status {
+            margin-top: 10px;
+        }
+
+        .hidden {
+            display: none;
+        }
+        
+    </style>
+</head>
+
+<body>
+    <div class="centered-content">
+        <h1>Hey Heka!!!</h1>
+        <div id="countdown" style="font-size: larger; margin-bottom: 1%;"></div>
+        <div id="recordingOptions">
+            <label for="singleRecording">Single Recording:</label>
+            <input type="radio" id="singleRecording" name="recordingMode" value="single" checked>
+            <label for="continuousRecording">Continuous Recording:</label>
+            <input type="radio" id="continuousRecording" name="recordingMode" value="continuous">
+        </div>
+        <input type="number" id="numRecordings" placeholder="Number of Recordings" class="hidden">
+        <button id="startRecording" class="button-24">Start Recording</button>
+        <button id="stopRecording" style="display: none;">Stop Recording</button>
+        <button id="next" style="display: none;">Next</button>
+        <div id="audioCounter" class="audio-counter"></div>
+        <div id="audio"></div>
+        <div id="recordingStatus" class="recording-status"></div>
+    </div>
+    <script>
+        let countdownElement = document.getElementById("countdown");
+        let startRecordingButton = document.getElementById("startRecording");
+        let stopRecordingButton = document.getElementById("stopRecording");
+        let nextButton = document.getElementById("next");
+        let audioCounter = document.getElementById("audioCounter");
+        let audio = document.getElementById("audio");
+        let numRecordingsInput = document.getElementById("numRecordings");
+        let recordingStatus = document.getElementById("recordingStatus");
+        let recordingModeSingle = document.getElementById("singleRecording");
+        let recordingModeContinuous = document.getElementById("continuousRecording");
+
+        let audioChunks = [];
+        let recorder;
+        let isRecording = false;
+        let recordingsCount = 0;
+
+        function startRecording(durationInSeconds, index) {
+            startRecordingButton.disabled = true;
+            stopRecordingButton.style.display = "inline";
+            nextButton.style.display = "none";
+
+            countdownElement.innerText = "Recording...";
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    recorder = new MediaRecorder(stream);
+
+                    recorder.ondataavailable = (e) => {
+                        audioChunks.push(e.data);
+                    };
+
+                    recorder.onstop = async () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        const newAudio = new Audio(audioUrl);
+                        newAudio.controls = true;
+                        audio.appendChild(newAudio);
+                        audioChunks = [];
+                        countdownElement.innerText = "Recording completed.";
+                        recordingsCount++;
+                        audioCounter.innerText = "Number of audios recorded: " + recordingsCount;
+                        recordingStatus.innerText = ""; // Clear recording status after completion
+                        saveRecordingLocally(audioBlob, index); // Save the recording locally
+                        if (isRecording && recordingModeContinuous.checked && recordingsCount < parseInt(numRecordingsInput.value)) {
+                            startRecording(1, recordingsCount); // Record for 1 second
+                        } else {
+                            startRecordingButton.disabled = false;
+                            stopRecordingButton.style.display = "none";
+                            nextButton.style.display = "none";
+                        }
+                    };
+
+                    recorder.start();
+                    setTimeout(() => {
+                        if (recorder.state === "recording") {
+                            recorder.stop();
+                        }
+                    }, durationInSeconds * 1000);
+                })
+                .catch(err => {
+                    console.error('Error accessing microphone:', err);
+                });
+        }
+
+        function saveRecordingLocally(audioBlob, index) {
+            const downloadLink = document.createElement('a');
+            downloadLink.href = URL.createObjectURL(audioBlob);
+            console.log(downloadLink.href);
+            downloadLink.download = `recording_${index}.wav`;
+            downloadLink.style.display = 'none';
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+
+        function stopRecording() {
+            if (recorder && recorder.state === "recording") {
+                recorder.stop();
+                isRecording = false;
+            }
+        }
+
+        function startNextRecording() {
+            isRecording = true;
+            nextButton.style.display = "none";
+            startRecording(1, recordingsCount); // Record for 1 second
+            recordingStatus.innerText = "Recording " + (recordingsCount + 1) + " of " + 10; // Update recording status
+        }
+
+        function recordContinuous() {
+            const numRecordings = parseInt(numRecordingsInput.value);
+            if (isNaN(numRecordings) || numRecordings <= 0) {
+                alert("Please enter a valid number of recordings greater than zero.");
+                return;
+            }
+            startNextRecording(); // Start the first recording
+        }
+
+        startRecordingButton.onclick = () => {
+            if (recordingModeSingle.checked) {
+                startNextRecording();
+            } else if (recordingModeContinuous.checked) {
+                numRecordingsInput.classList.remove('hidden');
+                startRecordingButton.innerText = "Record Noise";
+                recordContinuous();
+            }
+        };
+
+        stopRecordingButton.onclick = stopRecording;
+        nextButton.onclick = startNextRecording;
+
+        recordingModeSingle.addEventListener('click', () => {
+            numRecordingsInput.classList.add('hidden');
+            startRecordingButton.innerText = "Start Recording";
+        });
+
+        recordingModeContinuous.addEventListener('click', () => {
+            numRecordingsInput.classList.remove('hidden');
+            startRecordingButton.innerText = "Record Noise";
+        });
+    </script>
+</body>
+
+</html>
